@@ -5,13 +5,16 @@ import TaskWidget from '@/components/taskWidget';
 
 
 export default function App() {
-  const [TaskWidget, setVisible] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
   return (
     <View style={styles.container}>
-      {/* Example usage with specific dimensions */}
       <View style={styles.fab}>
-      <CustomButton onPress={() => setVisible(false)} title="+" width={60} height={60}/>
+      <CustomButton onPress={() => setIsOpen(true)} title="+" width={60} height={60}/>
     </View>
+    <TaskWidget
+    visible={isOpen}
+    onClose={() => setIsOpen(false)}
+    />
     </View>
   );
 }
