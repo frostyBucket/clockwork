@@ -1,17 +1,30 @@
-import React from 'react';
+import React, {useState} from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import CustomButton from '@/components/customButton';
+import TaskWidget from '@/components/taskWidget';
 
 
 export default function App() {
+  const [TaskWidget, setVisible] = useState(false);
   return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={styles.container}>
       {/* Example usage with specific dimensions */}
-      <CustomButton onPress={() => console.log("Pressed Large")} title="Large Button" width={200} height={60} />
-      {/* Example usage with percentage width */}
-      <View style={{ width: '80%', marginTop: 20 }}>
-        <CustomButton onPress={() => console.log("Pressed Full Width")} title="Full Width" width={'100%'} height={50} />
-      </View>
+      <View style={styles.fab}>
+      <CustomButton onPress={() => setVisible(false)} title="+" width={60} height={60}/>
+    </View>
     </View>
   );
 }
+
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#040014ff",
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 80,
+    right: 40,
+  },
+});
