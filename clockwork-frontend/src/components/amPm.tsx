@@ -3,8 +3,14 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 
 const ITEM_HEIGHT = 45;
 
-export default function AMPM() {
+export default function AMPM({onChange}) {
   const [value, setValue] = useState('AM');
+
+
+  const select = (v) => {
+    setValue(v);
+    onChange?.(v);
+  };
 
   return (
     <View style={styles.container}>
@@ -19,7 +25,7 @@ export default function AMPM() {
       {/* AM */}
       <Pressable
         style={styles.subItem}
-        onPress={() => setValue('AM')}
+        onPress={() => select('AM')}
       >
         <Text
           style={[
@@ -34,7 +40,7 @@ export default function AMPM() {
       {/* PM */}
       <Pressable
         style={styles.subItem}
-        onPress={() => setValue('PM')}
+        onPress={() => select('PM')}
       >
         <Text
           style={[
