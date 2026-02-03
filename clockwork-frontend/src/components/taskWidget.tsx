@@ -1,117 +1,169 @@
-import React, { useState } from 'react';
-import {
-  Modal,
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-} from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Modal, View, Text, StyleSheet, TextInput, Pressable, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
 
 import CustomButton from './customButton';
 import NumberScroller from './numberScroller';
 import AMPM from './amPm';
 
-export default function TaskWidget({ visible, onClose }) {
+const StarRating = ({ value, onChange }) => (
+  <View style={styles.starsRow}>
+    {[1, 2, 3].map((n) => (
+      <Pressable key={n} onPress={() => onChange(n)}>
+        <Text style={[styles.star, n <= value && styles.starActive]}>★</Text>
+      </Pressable>
+    ))}
+  </View>
+);
+
+export default function TaskWidget({ visible, onClose, task }) {
   const [title, setTitle] = useState('');
   const [hour, setHour] = useState(12);
   const [minute, setMinute] = useState(0);
   const [period, setPeriod] = useState('AM');
+  const [severity, setSeverity] = useState(1);
 
-  const saveHandler = async () => {
-    if (!title.trim()) return;
-
-    const newTask = {
-      id: Date.now().toString(),
-      title: title.trim(),
-      time: {
-        hour,
-        minute,
-        period, // "AM" | "PM"
-      },
-      createdAt: new Date().toISOString(),
-    };
-
-    try {
-      const storedTasks = await AsyncStorage.getItem('tasks');
-      const tasks = storedTasks ? JSON.parse(storedTasks) : [];
-
-      tasks.push(newTask);
-
-      await AsyncStorage.setItem('tasks', JSON.stringify(tasks));
-
-      // reset + close
+  useEffect(() => {
+    if (task) {
+      setTitle(task.title);
+      setHour(task.time.hour);
+      setMinute(task.time.minute);
+      setPeriod(task.time.period);
+      setSeverity(task.severity || 1);
+    } else {
       setTitle('');
       setHour(12);
       setMinute(0);
       setPeriod('AM');
+      setSeverity(1);
+    }
+  }, [task]);
 
-      onClose();
-    } catch (err) {
-      console.error('Failed to save task', err);
+  // Convert hour/minute/period to Date
+  const getTriggerTime = () => {
+    let hour24 =
+      period === 'PM' && hour !== 12
+        ? hour + 12
+        : period === 'AM' && hour === 12
+        ? 0
+        : hour;
+
+    const now = new Date();
+    const trigger = new Date();
+    trigger.setHours(hour24);
+    trigger.setMinutes(minute);
+    trigger.setSeconds(0);
+
+    if (trigger <= now) {
+      trigger.setDate(trigger.getDate() + 1);
+    }
+
+    return trigger;
+  };
+
+  const scheduleNotification = async (taskToNotify) => {
+    const date = getTriggerTime();
+
+    const triggerObj =
+      Platform.OS === 'web'
+        ? null
+        : { type: 'time', date, channelId: 'default' };
+
+    const notificationId = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Task Reminder',
+        body: taskToNotify.title,
+      },
+      trigger: triggerObj,
+    });
+
+    return notificationId;
+  };
+
+  const cancelNotification = async (notificationId) => {
+    if (notificationId) {
+      await Notifications.cancelScheduledNotificationAsync(notificationId);
     }
   };
 
+  const saveHandler = async () => {
+    if (!title.trim()) return;
+
+    const stored = await AsyncStorage.getItem('tasks');
+    const tasks = stored ? JSON.parse(stored) : [];
+
+    const updatedTask = {
+      id: task?.id || Date.now().toString(),
+      title: title.trim(),
+      severity,
+      time: { hour, minute, period },
+      createdAt: task?.createdAt || new Date().toISOString(),
+      notificationId: task?.notificationId,
+    };
+
+    // Cancel old notification if editing
+    if (task?.notificationId) await cancelNotification(task.notificationId);
+
+    // Schedule new notification
+    const newNotificationId = await scheduleNotification(updatedTask);
+    updatedTask.notificationId = newNotificationId;
+
+    const updatedTasks = task
+      ? tasks.map((t) => (t.id === task.id ? updatedTask : t))
+      : [...tasks, updatedTask];
+
+    await AsyncStorage.setItem('tasks', JSON.stringify(updatedTasks));
+    onClose();
+  };
+
+  const removeTask = async () => {
+    if (!task) return;
+
+    const stored = await AsyncStorage.getItem('tasks');
+    const tasks = stored ? JSON.parse(stored) : [];
+    const updatedTasks = tasks.filter((t) => t.id !== task.id);
+    await AsyncStorage.setItem('tasks', JSON.stringify(updatedTasks));
+
+    // Cancel notification
+    if (task.notificationId) await cancelNotification(task.notificationId);
+
+    onClose();
+  };
+
   return (
-    <Modal
-      transparent
-      animationType="fade"
-      visible={visible}
-      onRequestClose={onClose}
-    >
+    <Modal transparent animationType="fade" visible={visible}>
       <View style={styles.overlay}>
         <View style={styles.popup}>
-          <Text style={styles.headerTag}>New Task</Text>
+          <Text style={styles.headerTag}>{task ? 'Edit Task' : 'New Task'}</Text>
 
           <TextInput
             style={styles.input}
             placeholder="Task Name"
-            placeholderTextColor="rgba(255, 255, 255, 0.32)"
+            placeholderTextColor="rgba(255,255,255,0.3)"
             value={title}
             onChangeText={setTitle}
           />
 
-          <View style={styles.buttons}>
-            <NumberScroller
-              value={hour}
-              onChange={setHour}
-              min={1}
-              max={12}
-            />
-
-            <Text style={styles.colon}> : </Text>
-
-            <NumberScroller
-              value={minute}
-              onChange={setMinute}
-              min={0}
-              max={59}
-            />
-
+          <View style={styles.clockContainer}>
+            <NumberScroller value={hour} onChange={setHour} min={1} max={12} />
+            <Text style={styles.colon}>:</Text>
+            <NumberScroller value={minute} onChange={setMinute} min={0} max={59} />
             <AMPM value={period} onChange={setPeriod} />
           </View>
 
-          <View>
-            <Text>
-
-
-            </Text>
-          </View>
+          <StarRating value={severity} onChange={setSeverity} />
 
           <View style={styles.buttons}>
-            <CustomButton
-              onPress={onClose}
-              title="Cancel"
-              width={100}
-              height={60}
-            />
-            <Text>  </Text>
-            <CustomButton
-              onPress={saveHandler}
-              title="Save"
-              width={100}
-              height={60}
-            />
+            <CustomButton title="Cancel" onPress={onClose} width={100} height={60} />
+            <Text> </Text>
+            <CustomButton title="Save" onPress={saveHandler} width={100} height={60} />
+            {task && (
+              <>
+                <Text> </Text>
+                <CustomButton title="Remove" onPress={removeTask} width={100} height={60} />
+              </>
+            )}
           </View>
         </View>
       </View>
@@ -120,33 +172,14 @@ export default function TaskWidget({ visible, onClose }) {
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTag: {
-    marginRight: 10,
-    color: 'white',
-  },
-  popup: {
-    padding: 20,
-    backgroundColor: 'rgba(0, 16, 51, 1)',
-    borderRadius: 10,
-  },
-  colon: {
-    fontSize: 30,
-    color: 'white',
-  },
-  input: {
-    alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 10,
-    color: 'white',
-  },
-  buttons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  popup: { padding: 20, backgroundColor: 'rgba(0,16,51,1)', borderRadius: 10 },
+  headerTag: { color: 'white', marginBottom: 10 },
+  input: { color: 'white', marginBottom: 10 },
+  colon: { color: 'white', fontSize: 30 },
+  clockContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginVertical: 10 },
+  buttons: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
+  starsRow: { flexDirection: 'row', justifyContent: 'center', marginVertical: 10 },
+  star: { fontSize: 28, color: 'rgba(255,255,255,0.3)', marginHorizontal: 6 },
+  starActive: { color: '#FFD700' },
 });
