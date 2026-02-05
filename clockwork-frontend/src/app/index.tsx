@@ -22,13 +22,26 @@ export default function App() {
 
   useEffect(() => {
     loadTasks();
-    requestPermissions();
-    setupNotificationChannel();
+    initNotifications();
   }, []);
 
-  const requestPermissions = async () => {
-    const { status } = await Notifications.requestPermissionsAsync();
-    if (status !== 'granted') {
+  const initNotifications = async () => {
+    await setupNotificationChannel();
+    await requestNotificationPermissions();
+  };
+
+  const requestNotificationPermissions = async () => {
+    const { status: existingStatus } =
+      await Notifications.getPermissionsAsync();
+
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') {
       alert('Notifications are disabled. Task reminders will not appear.');
     }
   };
@@ -38,6 +51,8 @@ export default function App() {
       await Notifications.setNotificationChannelAsync('default', {
         name: 'Default',
         importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
       });
     }
   };
@@ -55,13 +70,16 @@ export default function App() {
 
   const renderTask = ({ item }) => {
     const { hour, minute, period } = item.time;
+
     return (
       <Pressable style={styles.taskItem} onPress={() => openTask(item)}>
         <Text style={styles.taskTitle}>{item.title}</Text>
         <Text style={styles.taskTime}>
           {hour}:{minute.toString().padStart(2, '0')} {period}
         </Text>
-        <Text style={styles.stars}>{'★'.repeat(item.severity || 1)}</Text>
+        <Text style={styles.stars}>
+          {'★'.repeat(item.severity || 1)}
+        </Text>
       </Pressable>
     );
   };
@@ -80,10 +98,19 @@ export default function App() {
       )}
 
       <View style={styles.fab}>
-        <CustomButton title="+" width={60} height={60} onPress={() => openTask(null)} />
+        <CustomButton
+          title="+"
+          width={60}
+          height={60}
+          onPress={() => openTask(null)}
+        />
       </View>
 
-      <TaskWidget visible={isOpen} onClose={closeWidget} task={editingTask} />
+      <TaskWidget
+        visible={isOpen}
+        onClose={closeWidget}
+        task={editingTask}
+      />
     </View>
   );
 }
@@ -99,6 +126,11 @@ const styles = StyleSheet.create({
   taskTitle: { color: 'white', fontSize: 18, fontWeight: '600' },
   taskTime: { color: 'rgba(255,255,255,0.7)', marginTop: 4 },
   stars: { color: '#FFD700', marginTop: 4, fontSize: 16 },
-  empty: { marginTop: 100, textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: 16 },
+  empty: {
+    marginTop: 100,
+    textAlign: 'center',
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 16,
+  },
   fab: { position: 'absolute', bottom: 80, right: 40 },
 });
